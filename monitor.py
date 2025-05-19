@@ -3,10 +3,13 @@ import pytz
 from datetime import datetime
 
 # Fuso horário de Cuiabá
-cuiaba_tz = pytz.timezone('America/Cuiaba')
+CUIABA_TZ = pytz.timezone('America/Cuiaba')
+
+# Máximo de registros por unidade
+MAX_HISTORY_LEN = 100  # mínimo 24 para verificar 2 minutos
 
 # Sites e hospitais
-sites = {
+SITES = {
     'Alto Garças': 'https://altogarcas.celk.com.br/',
     'Alto Paraguai': 'https://altoparaguai.celk.com.br/',
     'Aripuanã': 'https://aripuana.celk.com.br/',
@@ -35,83 +38,78 @@ sites = {
     'Hospital Várzea Grande': 'https://hospitalvarzeagrande.celk.com.br/',
 }
 
-# Ordem personalizada fixa
-ordered_names = [
-    'Alto Garças',
-    'Alto Paraguai',
-    'Aripuanã',
-    'Brasnorte',
-    'Cassilândia',
-    'Chapada dos Guimarães',
-    'Confresa',
-    'Mirassol D\'Oeste',
-    'Nortelândia',
-    'Nossa Senhora do Livramento',
-    'Nova Maringá',
-    'Santo Antônio do Leverger',
-    'São José do Rio Claro',
-    'Vila Bela',
-    'Várzea Grande',
-    'Hospital Aparecida',
-    'Hospital Aripuanã',
-    'Hospital Brasnorte',
-    'Hospital Confresa',
-    'Hospital Cotriguaçu',
-    'Hospital Livramento',
-    'Hospital Nova Xavantina',
-    'Hospital Salto do Céu',
-    'Hospital São José do Rio Claro',
-    'Hospital Várzea Grande',
-]
+# Ordem personalizada
+ORDERED_NAMES = list(SITES.keys())
 
-# Dados armazenados
-max_len = 100  # para armazenar histórico suficiente (mínimo 24 para 2 minutos)
-history = {site: [] for site in sites}
+# Histórico de status e horários
+history = {site: [] for site in SITES}
 timestamps = []
 
 def get_status_color(name):
     data = history[name]
-    if len(data) < 2:
+    try:
+        if len(data) < 2:
+            return 'green' if data[-1] == 1 else 'red'
+        if data[-1] != data[-2]:
+            return 'yellow'
         return 'green' if data[-1] == 1 else 'red'
-    if data[-1] != data[-2]:
-        return 'yellow'
-    return 'green' if data[-1] == 1 else 'red'
+    except IndexError:
+        return 'gray'  # Sem dados suficientes
 
 def get_alerts():
     offline_alerts = []
     for nome, historico in history.items():
-        if len(historico) < 24:
-            continue
-        # Se os últimos 24 pontos estão todos como 0 (fora do ar)
-        if all(status == 0 for status in historico[-24:]):
-            offline_alerts.append(nome)
+        try:
+            if len(historico) >= 24 and all(status == 0 for status in historico[-24:]):
+                offline_alerts.append(nome)
+        except Exception as e:
+            print(f"[ERRO ALERTA] {nome}: {e}")
     return offline_alerts
 
 def get_status_data():
-    current_dt = datetime.now(cuiaba_tz)
-    current_time = current_dt.strftime('%H:%M:%S')
+    try:
+        current_dt = datetime.now(CUIABA_TZ)
+        current_time = current_dt.strftime('%H:%M:%S')
 
-    if len(timestamps) >= max_len:
-        timestamps.pop(0)
-    timestamps.append(current_time)
+        if len(timestamps) >= MAX_HISTORY_LEN:
+            timestamps.pop(0)
+        timestamps.append(current_time)
 
-    for nome, url in sites.items():
-        try:
-            response = requests.get(url, timeout=5)
-            status = 1 if response.status_code == 200 else 0
-        except Exception:
-            status = 0
+        for nome, url in SITES.items():
+            try:
+                response = requests.get(url, timeout=5)
+                status = 1 if response.status_code == 200 else 0
+            except requests.RequestException as e:
+                print(f"[ERRO CONEXÃO] {nome}: {e}")
+                status = 0
+            except Exception as e:
+                print(f"[ERRO DESCONHECIDO] {nome}: {e}")
+                status = 0
 
-        if len(history[nome]) >= max_len:
-            history[nome].pop(0)
-        history[nome].append(status)
+            if len(history[nome]) >= MAX_HISTORY_LEN:
+                history[nome].pop(0)
+            history[nome].append(status)
 
-    status_colors = {nome: get_status_color(nome) for nome in ordered_names if nome in sites}
-    offline_alerts = get_alerts()
+        status_colors = {
+            nome: get_status_color(nome)
+            for nome in ORDERED_NAMES if nome in SITES
+        }
 
-    return {
-        "timestamps": timestamps.copy(),
-        "data": {nome: history[nome].copy() for nome in ordered_names if nome in sites},
-        "status_colors": status_colors,
-        "alerts": offline_alerts  # Lista com nomes das unidades fora por mais de 2 minutos
-    }
+        offline_alerts = get_alerts()
+
+        return {
+            "timestamps": timestamps.copy(),
+            "data": {nome: history[nome].copy() for nome in ORDERED_NAMES if nome in SITES},
+            "status_colors": status_colors,
+            "alerts": offline_alerts
+        }
+
+    except Exception as e:
+        print(f"[ERRO GERAL] Falha ao coletar dados: {e}")
+        return {
+            "timestamps": [],
+            "data": {},
+            "status_colors": {},
+            "alerts": []
+        }
+
