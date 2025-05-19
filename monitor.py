@@ -2,6 +2,7 @@ import requests
 import pytz
 from datetime import datetime
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Fuso horário de Cuiabá
 CUIABA_TZ = pytz.timezone('America/Cuiaba')
@@ -70,24 +71,27 @@ def get_alerts():
             print(f"[ERRO ALERTA] {nome}: {e}")
     return offline_alerts
 
+def check_site(nome, url):
+    try:
+        response = requests.get(url, timeout=5)
+        return nome, 1 if response.status_code == 200 else 0
+    except Exception as e:
+        print(f"[ERRO CONEXÃO] {nome}: {e}")
+        return nome, 0
+
 def get_status_data():
     try:
         current_dt = datetime.now(CUIABA_TZ)
         current_time = current_dt.strftime('%H:%M:%S')
 
-        # Faz as requisições fora do lock
         status_dict = {}
-        for nome, url in SITES.items():
-            try:
-                response = requests.get(url, timeout=5)
-                status = 1 if response.status_code == 200 else 0
-            except requests.RequestException as e:
-                print(f"[ERRO CONEXÃO] {nome}: {e}")
-                status = 0
-            except Exception as e:
-                print(f"[ERRO DESCONHECIDO] {nome}: {e}")
-                status = 0
-            status_dict[nome] = status
+
+        # Faz requisições com limite de 5 simultâneas
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_site = {executor.submit(check_site, nome, url): nome for nome, url in SITES.items()}
+            for future in as_completed(future_to_site):
+                nome, status = future.result()
+                status_dict[nome] = status
 
         with lock:
             # Atualiza timestamps
@@ -123,4 +127,3 @@ def get_status_data():
             "status_colors": {},
             "alerts": []
         }
-
