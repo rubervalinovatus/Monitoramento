@@ -71,26 +71,32 @@ def get_alerts():
     return offline_alerts
 
 def get_status_data():
-    with lock:
-        try:
-            current_dt = datetime.now(CUIABA_TZ)
-            current_time = current_dt.strftime('%H:%M:%S')
+    try:
+        current_dt = datetime.now(CUIABA_TZ)
+        current_time = current_dt.strftime('%H:%M:%S')
 
+        # Faz as requisições fora do lock
+        status_dict = {}
+        for nome, url in SITES.items():
+            try:
+                response = requests.get(url, timeout=5)
+                status = 1 if response.status_code == 200 else 0
+            except requests.RequestException as e:
+                print(f"[ERRO CONEXÃO] {nome}: {e}")
+                status = 0
+            except Exception as e:
+                print(f"[ERRO DESCONHECIDO] {nome}: {e}")
+                status = 0
+            status_dict[nome] = status
+
+        with lock:
+            # Atualiza timestamps
             if len(timestamps) >= MAX_HISTORY_LEN:
                 timestamps.pop(0)
             timestamps.append(current_time)
 
-            for nome, url in SITES.items():
-                try:
-                    response = requests.get(url, timeout=5)
-                    status = 1 if response.status_code == 200 else 0
-                except requests.RequestException as e:
-                    print(f"[ERRO CONEXÃO] {nome}: {e}")
-                    status = 0
-                except Exception as e:
-                    print(f"[ERRO DESCONHECIDO] {nome}: {e}")
-                    status = 0
-
+            # Atualiza históricos
+            for nome, status in status_dict.items():
                 if len(history[nome]) >= MAX_HISTORY_LEN:
                     history[nome].pop(0)
                 history[nome].append(status)
@@ -109,11 +115,12 @@ def get_status_data():
                 "alerts": offline_alerts
             }
 
-        except Exception as e:
-            print(f"[ERRO GERAL] Falha ao coletar dados: {e}")
-            return {
-                "timestamps": [],
-                "data": {},
-                "status_colors": {},
-                "alerts": []
-            }
+    except Exception as e:
+        print(f"[ERRO GERAL] Falha ao coletar dados: {e}")
+        return {
+            "timestamps": [],
+            "data": {},
+            "status_colors": {},
+            "alerts": []
+        }
+
