@@ -19,6 +19,15 @@ def update_data_loop():
             traceback.print_exc()
         time.sleep(5)  # intervalo de 5 segundos
 
+
+#@app.before_first_request
+#def start_background_thread():
+  #  global data_thread_started
+   # if not data_thread_started:
+    #    print("[INFO] Iniciando thread de atualização de dados...")
+    #    threading.Thread(target=update_data_loop, daemon=True).start()
+     #   data_thread_started = True
+
 if not data_thread_started:
     print("[INFO] Iniciando thread de atualização de dados...")
     threading.Thread(target=update_data_loop, daemon=True).start()
