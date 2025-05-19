@@ -1,4 +1,4 @@
-import Flask
+from flask import Flask, render_template, jsonify
 from monitor import get_status_data
 import threading
 import time
