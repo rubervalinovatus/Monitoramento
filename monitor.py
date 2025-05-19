@@ -1,6 +1,7 @@
 import requests
 import pytz
 from datetime import datetime
+import threading
 
 # Fuso horário de Cuiabá
 CUIABA_TZ = pytz.timezone('America/Cuiaba')
@@ -38,23 +39,26 @@ SITES = {
     'Hospital Várzea Grande': 'https://hospitalvarzeagrande.celk.com.br/',
 }
 
-# Ordem personalizada
 ORDERED_NAMES = list(SITES.keys())
 
 # Histórico de status e horários
 history = {site: [] for site in SITES}
 timestamps = []
 
+# Lock para evitar concorrência
+lock = threading.Lock()
+
 def get_status_color(name):
-    data = history[name]
     try:
+        data = history[name]
         if len(data) < 2:
-            return 'green' if data[-1] == 1 else 'red'
+            return 'green' if data and data[-1] == 1 else 'red'
         if data[-1] != data[-2]:
             return 'yellow'
         return 'green' if data[-1] == 1 else 'red'
-    except IndexError:
-        return 'gray'  # Sem dados suficientes
+    except Exception as e:
+        print(f"[ERRO STATUS_COLOR] {name}: {e}")
+        return 'gray'
 
 def get_alerts():
     offline_alerts = []
@@ -67,49 +71,49 @@ def get_alerts():
     return offline_alerts
 
 def get_status_data():
-    try:
-        current_dt = datetime.now(CUIABA_TZ)
-        current_time = current_dt.strftime('%H:%M:%S')
+    with lock:
+        try:
+            current_dt = datetime.now(CUIABA_TZ)
+            current_time = current_dt.strftime('%H:%M:%S')
 
-        if len(timestamps) >= MAX_HISTORY_LEN:
-            timestamps.pop(0)
-        timestamps.append(current_time)
+            if len(timestamps) >= MAX_HISTORY_LEN:
+                timestamps.pop(0)
+            timestamps.append(current_time)
 
-        for nome, url in SITES.items():
-            try:
-                response = requests.get(url, timeout=5)
-                status = 1 if response.status_code == 200 else 0
-            except requests.RequestException as e:
-                print(f"[ERRO CONEXÃO] {nome}: {e}")
-                status = 0
-            except Exception as e:
-                print(f"[ERRO DESCONHECIDO] {nome}: {e}")
-                status = 0
+            for nome, url in SITES.items():
+                try:
+                    response = requests.get(url, timeout=5)
+                    status = 1 if response.status_code == 200 else 0
+                except requests.RequestException as e:
+                    print(f"[ERRO CONEXÃO] {nome}: {e}")
+                    status = 0
+                except Exception as e:
+                    print(f"[ERRO DESCONHECIDO] {nome}: {e}")
+                    status = 0
 
-            if len(history[nome]) >= MAX_HISTORY_LEN:
-                history[nome].pop(0)
-            history[nome].append(status)
+                if len(history[nome]) >= MAX_HISTORY_LEN:
+                    history[nome].pop(0)
+                history[nome].append(status)
 
-        status_colors = {
-            nome: get_status_color(nome)
-            for nome in ORDERED_NAMES if nome in SITES
-        }
+            status_colors = {
+                nome: get_status_color(nome)
+                for nome in ORDERED_NAMES
+            }
 
-        offline_alerts = get_alerts()
+            offline_alerts = get_alerts()
 
-        return {
-            "timestamps": timestamps.copy(),
-            "data": {nome: history[nome].copy() for nome in ORDERED_NAMES if nome in SITES},
-            "status_colors": status_colors,
-            "alerts": offline_alerts
-        }
+            return {
+                "timestamps": timestamps.copy(),
+                "data": {nome: history[nome].copy() for nome in ORDERED_NAMES},
+                "status_colors": status_colors,
+                "alerts": offline_alerts
+            }
 
-    except Exception as e:
-        print(f"[ERRO GERAL] Falha ao coletar dados: {e}")
-        return {
-            "timestamps": [],
-            "data": {},
-            "status_colors": {},
-            "alerts": []
-        }
-
+        except Exception as e:
+            print(f"[ERRO GERAL] Falha ao coletar dados: {e}")
+            return {
+                "timestamps": [],
+                "data": {},
+                "status_colors": {},
+                "alerts": []
+            }
