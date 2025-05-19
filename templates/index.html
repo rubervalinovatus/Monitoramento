@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <title>Status das Unidades</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background: #f5f7fa;
+            display: flex;
+            justify-content: center;
+            align-items: start;
+            min-height: 100vh;
+            padding-top: 40px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 40px 50px;
+            max-width: 1000px;
+            width: 100%;
+            position: relative;
+        }
+        .clock {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 0.95em;
+            color: #555;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        /* Novo estilo para alertas */
+        #alerts {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #dc3545; /* vermelho */
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .columns {
+            display: flex;
+            justify-content: space-between;
+            gap: 40px;
+        }
+        .column {
+            flex: 1;
+        }
+        h2 {
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            color: #444;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+        .unit-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .unit-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 1.05em;
+            padding: 8px 12px;
+            border-radius: 8px;
+            transition: background 0.2s ease;
+        }
+        .unit-item:hover {
+            background: #f0f4f8;
+        }
+        .status-dot {
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 12px;
+        }
+        .green { background-color: #28a745; }
+        .yellow { background-color: #ffc107; }
+        .red { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="clock" id="clock"></div>
+        <h1>Status das Unidades</h1>
+
+        <!-- Container para mostrar as notificações -->
+        <div id="alerts"></div>
+
+        <div class="columns">
+            <div class="column">
+                <h2>Bases</h2>
+                <ul class="unit-list" id="bases-list"></ul>
+            </div>
+            <div class="column">
+                <h2>Hospitais</h2>
+                <ul class="unit-list" id="hospitais-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchData() {
+            const res = await fetch('/data');
+            return res.json();
+        }
+
+        function renderList(statusColors) {
+            const basesList = document.getElementById('bases-list');
+            const hospitaisList = document.getElementById('hospitais-list');
+            basesList.innerHTML = '';
+            hospitaisList.innerHTML = '';
+
+            for (const [unit, color] of Object.entries(statusColors)) {
+                const li = document.createElement('li');
+                li.className = 'unit-item';
+
+                const dot = document.createElement('span');
+                dot.className = `status-dot ${color}`;
+
+                li.appendChild(dot);
+                li.appendChild(document.createTextNode(unit));
+
+                if (unit.startsWith('Hospital')) {
+                    hospitaisList.appendChild(li);
+                } else {
+                    basesList.appendChild(li);
+                }
+            }
+        }
+
+        async function update() {
+            const data = await fetchData();
+            renderList(data.status_colors);
+
+            const alertsDiv = document.getElementById('alerts');
+            if (data.alerts.length > 0) {
+                alertsDiv.textContent = 'Unidades offline por mais de 2 minutos: ' + data.alerts.join(', ');
+            } else {
+                alertsDiv.textContent = '';
+            }
+        }
+
+        function updateClock() {
+            const now = new Date();
+            const options = {
+                timeZone: 'America/Cuiaba',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            };
+            const formatter = new Intl.DateTimeFormat('pt-BR', options);
+            document.getElementById('clock').textContent = 'Horário de Cuiabá: ' + formatter.format(now);
+        }
+
+        setInterval(update, 5000);
+        update();
+
+        setInterval(updateClock, 1000);
+        updateClock();
+    </script>
+</body>
+</html>
