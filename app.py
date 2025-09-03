@@ -20,14 +20,6 @@ def update_data_loop():
         time.sleep(5)  # intervalo de 5 segundos
 
 
-#@app.before_first_request
-#def start_background_thread():
-  #  global data_thread_started
-   # if not data_thread_started:
-    #    print("[INFO] Iniciando thread de atualização de dados...")
-    #    threading.Thread(target=update_data_loop, daemon=True).start()
-     #   data_thread_started = True
-
 if not data_thread_started:
     print("[INFO] Iniciando thread de atualização de dados...")
     threading.Thread(target=update_data_loop, daemon=True).start()
@@ -64,3 +56,4 @@ if __name__ == '__main__':
     except Exception as e:
         print("[ERRO AO INICIAR O SERVIDOR FLASK]")
         traceback.print_exc()
+
